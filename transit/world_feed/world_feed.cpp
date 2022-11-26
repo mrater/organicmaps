@@ -31,6 +31,9 @@ static double constexpr kAvgTransitSpeedMpS = 11.1;
 // is corrupted if we cant't properly project all stops from the trip to its polyline.
 static size_t constexpr kMaxInvalidShapesCount = 5;
 
+//max absolute error of shape-to-stop projection algorithm 
+static double constexpr kProjectionAlgorithmError = 0.5;
+
 ::transit::TransitId constexpr kInvalidLineId = std::numeric_limits<::transit::TransitId>::max();
 
 template <class C, class ID>
@@ -898,63 +901,94 @@ std::optional<Direction> WorldFeed::ProjectStopsToShape(
 {
   IdList const & stopIds = stopsOnLines.m_stopSeq;
   TransitId const shapeId = itShape->first;
+  
 
+  std::unordered_map<TransitId, std::vector<size_t>> cur_stops_to_indexes;
+  auto cur_shape_lines =  m_shapes.m_data[shapeId].m_lineIds;
   auto const tryProject = [&](Direction direction)
   {
     auto shape = itShape->second.m_points;
     std::optional<m2::PointD> prevPoint = std::nullopt;
-    for (size_t i = 0; i < stopIds.size(); ++i)
+    double min_considered_distance = 0.0, max_considered_distance = 150.0;
+
+    //A binary search algorithm that projects stops to shape in such manner that the maximum existing distance
+    //between stop and its projection is minimal
+    //these point need to strictly increase (or decrease depending on direction) along the way
+    while (max_considered_distance - min_considered_distance > kProjectionAlgorithmError)
     {
-      auto const & stopId = stopIds[i];
-      auto const itStop = m_stops.m_data.find(stopId);
-      CHECK(itStop != m_stops.m_data.end(), (stopId));
-      auto const & stop = itStop->second;
+      //we require that all distances from stop to its projection will be less or equal to the following value
+      double cur_considered_distance = (max_considered_distance + min_considered_distance) / 2.0;
+      
+      
+      cur_stops_to_indexes = stopsToIndexes;
+      auto cur_shape_lines = m_shapes.m_data[shapeId].m_lineIds;
+      bool project_attempt_successful = true;
 
-      size_t const prevIdx = i == 0 ? (direction == Direction::Forward ? 0 : shape.size() - 1)
-                                    : stopsToIndexes[stopIds[i - 1]].back();
-      auto const [curIdx, pointInserted] =
-          PrepareNearestPointOnTrack(stop.m_point, prevPoint, prevIdx, direction, shape);
-
-      if (curIdx > shape.size())
+      size_t prevIdx = (direction == Direction::Forward ? 0 : shape.size() - 1);
+      for (size_t i = 0; i < stopIds.size(); ++i)
       {
-        CHECK(!itShape->second.m_lineIds.empty(), (shapeId));
-        TransitId const lineId = *stopsOnLines.m_lines.begin();
+        auto const & stopId = stopIds[i];
+        auto const itStop = m_stops.m_data.find(stopId);
+        CHECK(itStop != m_stops.m_data.end(), (stopId));
+        auto const & stop = itStop->second;
 
-        LOG(LWARNING,
-            ("Error projecting stops to the shape. GTFS trip id",
-             m_lines.m_data[lineId].m_gtfsTripId, "shapeId", shapeId, "stopId", stopId, "i", i,
-             "previous index on shape", prevIdx, "trips count", stopsOnLines.m_lines.size()));
-        return false;
-      }
+        auto const [curIdx, pointInserted] =
+            PrepareNearestPointOnTrack(stop.m_point, prevPoint, prevIdx, direction, shape, cur_considered_distance);
 
-      prevPoint = std::optional<m2::PointD>(stop.m_point);
-
-      if (pointInserted)
-      {
-        for (auto & indexesList : stopsToIndexes)
+        prevIdx = stopsToIndexes[stopIds[i - 1]].back();
+        if (curIdx > shape.size())
         {
-          for (auto & stopIndex : indexesList.second)
+          CHECK(!itShape->second.m_lineIds.empty(), (shapeId));
+          TransitId const lineId = *stopsOnLines.m_lines.begin();
+
+          LOG(LWARNING,
+              ("Error projecting stops to the shape. GTFS trip id",
+              m_lines.m_data[lineId].m_gtfsTripId, "shapeId", shapeId, "stopId", stopId, "i", i,
+              "previous index on shape", prevIdx, "trips count", stopsOnLines.m_lines.size()));
+          
+          project_attempt_successful = false;
+          break;
+        }
+
+        prevPoint = std::optional<m2::PointD>(stop.m_point);
+
+        if (pointInserted)
+        {
+          for (auto & indexesList : cur_stops_to_indexes)
           {
-            if (stopIndex >= curIdx)
-              ++stopIndex;
+            for (auto & stopIndex : indexesList.second)
+            {
+              if (stopIndex >= curIdx)
+                ++stopIndex;
+            }
+          }
+
+          for (auto const & lineId : cur_shape_lines)
+          {
+            auto & line = m_lines.m_data[lineId];
+
+            if (line.m_shapeLink.m_startIndex >= curIdx)
+              ++line.m_shapeLink.m_startIndex;
+
+            if (line.m_shapeLink.m_endIndex >= curIdx)
+              ++line.m_shapeLink.m_endIndex;
           }
         }
 
-        for (auto const & lineId : m_shapes.m_data[shapeId].m_lineIds)
-        {
-          auto & line = m_lines.m_data[lineId];
-
-          if (line.m_shapeLink.m_startIndex >= curIdx)
-            ++line.m_shapeLink.m_startIndex;
-
-          if (line.m_shapeLink.m_endIndex >= curIdx)
-            ++line.m_shapeLink.m_endIndex;
-        }
+        stopsToIndexes[stopId].push_back(curIdx);
       }
-
-      stopsToIndexes[stopId].push_back(curIdx);
+      if (project_attempt_successful)
+      {
+        max_considered_distance = cur_considered_distance;
+        stopsToIndexes = cur_stops_to_indexes;
+        m_shapes.m_data[shapeId].m_lineIds = cur_shape_lines;
+      } else 
+      {
+        min_considered_distance = cur_considered_distance;
+      }
     }
 
+    
     itShape->second.m_points = std::move(shape);
     return true;
   };

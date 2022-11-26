@@ -87,9 +87,9 @@ ProjectionData GetProjection(std::vector<m2::PointD> const & polyline, size_t in
   return projData;
 }
 
-void FillProjections(std::vector<m2::PointD> & polyline, size_t startIndex, size_t endIndex,
+std::pair<ProjectionData, bool> GetSufficientProjection(std::vector<m2::PointD> & polyline, size_t startIndex, size_t endIndex,
                      m2::PointD const & point, double distStopsM, Direction direction,
-                     std::vector<ProjectionData> & projections)
+                     double const & sufficient_distance)
 {
   CHECK_LESS_OR_EQUAL(startIndex, endIndex, ());
 
@@ -124,68 +124,39 @@ void FillProjections(std::vector<m2::PointD> & polyline, size_t startIndex, size
 
     // The distance on the polyline between the projections of stops must not be less than the
     // shortest possible distance between the stops themselves.
-    if (proj.m_distFromEnding < distStopsM)
+    if (proj.m_distFromEnding < distStopsM || proj.m_distFromPoint > sufficient_distance)
       continue;
 
-    if (proj.m_distFromPoint < maxDistFromStopM)
-      projections.emplace_back(proj);
+    return {proj, true};
   }
+  ProjectionData null_projection_data;
+  return {null_projection_data, false};
 }
 
 std::pair<size_t, bool> PrepareNearestPointOnTrack(m2::PointD const & point,
                                                    std::optional<m2::PointD> const & prevPoint,
                                                    size_t prevIndex, Direction direction,
-                                                   std::vector<m2::PointD> & polyline)
+                                                   std::vector<m2::PointD> & polyline,
+                                                   double const & sufficient_distance)
 {
   // We skip 70% of the distance in a straight line between two stops for preventing incorrect
   // projection of the |point| to the polyline of complex shape.
   double const distStopsM = prevPoint ? mercator::DistanceOnEarth(point, *prevPoint) * 0.7 : 0.0;
 
-  std::vector<ProjectionData> projections;
-  // Reserve space for points on polyline which are relatively close to the shape.
-  // Approximately 1/4 of all points on shape.
-  auto const size = direction == Direction::Forward ? polyline.size() - prevIndex : prevIndex;
-  projections.reserve(size / 4);
+  auto const startIndex = direction == Direction::Forward ? prevIndex + 1 : 0;
+  auto const endIndex = direction == Direction::Forward ? polyline.size() - 1 : prevIndex - 1;
+  // FillProjections(polyline, startIndex, endIndex, point, distStopsM, direction, projections);
 
-  auto const startIndex = direction == Direction::Forward ? prevIndex : 0;
-  auto const endIndex = direction == Direction::Forward ? polyline.size() - 1 : prevIndex;
-  FillProjections(polyline, startIndex, endIndex, point, distStopsM, direction, projections);
+  auto [projection, projection_valid] = GetSufficientProjection(polyline, startIndex, endIndex, point, distStopsM, direction, sufficient_distance);
 
-  if (projections.empty())
+
+  if (!projection_valid)
     return {polyline.size() + 1, false};
 
-  // We find the most fitting projection of the stop to the polyline. For two different projections
-  // with approximately equal distances to the stop the most preferable is the one that is closer
-  // to the beginning of the polyline segment.
-  auto const cmp = [](ProjectionData const & p1, ProjectionData const & p2) {
-    if (CloserToEndingAndOnSimilarDistToLine(p1, p2))
-      return true;
+  if (projection.m_needsInsertion)
+    polyline.insert(polyline.begin() + projection.m_indexOnShape, projection.m_proj);
 
-    if (CloserToEndingAndOnSimilarDistToLine(p2, p1))
-      return false;
-
-    if (p1.m_distFromPoint == p2.m_distFromPoint)
-      return p1.m_distFromEnding < p2.m_distFromEnding;
-
-    return p1.m_distFromPoint < p2.m_distFromPoint;
-  };
-
-  auto proj = std::min_element(projections.begin(), projections.end(), cmp);
-
-  // This case is possible not only for the first stop on the shape. We try to resolve situation
-  // when two stops are projected to the same point on the shape.
-  if (proj->m_indexOnShape == prevIndex)
-  {
-    proj = std::min_element(projections.begin(), projections.end(),
-                         [](ProjectionData const & p1, ProjectionData const & p2) {
-                           return p1.m_distFromPoint < p2.m_distFromPoint;
-                         });
-  }
-
-  if (proj->m_needsInsertion)
-    polyline.insert(polyline.begin() + proj->m_indexOnShape, proj->m_proj);
-
-  return {proj->m_indexOnShape, proj->m_needsInsertion};
+  return {projection.m_indexOnShape, projection.m_needsInsertion};
 }
 
 bool IsRelevantType(gtfs::RouteType const & routeType)

@@ -38,7 +38,8 @@ ProjectionToShape ProjectStopOnTrack(m2::PointD const & stopPoint, m2::PointD co
 std::pair<size_t, bool> PrepareNearestPointOnTrack(m2::PointD const & point,
                                                    std::optional<m2::PointD> const & prevPoint,
                                                    size_t prevIndex, Direction direction,
-                                                   std::vector<m2::PointD> & polyline);
+                                                   std::vector<m2::PointD> & polyline,
+                                                   double const & sufficient_distance);
 
 /// \returns true if we should not skip routes with this GTFS |routeType|.
 bool IsRelevantType(const gtfs::RouteType & routeType);
