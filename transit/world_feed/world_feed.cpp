@@ -910,6 +910,7 @@ std::optional<Direction> WorldFeed::ProjectStopsToShape(
     auto shape = itShape->second.m_points;
     std::optional<m2::PointD> prevPoint = std::nullopt;
     double min_considered_distance = 0.0, max_considered_distance = 150.0;
+    bool proper_projection_found = false;
 
     //A binary search algorithm that projects stops to shape in such manner that the maximum existing distance
     //between stop and its projection is minimal
@@ -924,7 +925,6 @@ std::optional<Direction> WorldFeed::ProjectStopsToShape(
       auto cur_shape_lines = m_shapes.m_data[shapeId].m_lineIds;
       bool project_attempt_successful = true;
 
-      size_t prevIdx = (direction == Direction::Forward ? 0 : shape.size() - 1);
       for (size_t i = 0; i < stopIds.size(); ++i)
       {
         auto const & stopId = stopIds[i];
@@ -932,10 +932,12 @@ std::optional<Direction> WorldFeed::ProjectStopsToShape(
         CHECK(itStop != m_stops.m_data.end(), (stopId));
         auto const & stop = itStop->second;
 
+        size_t const prevIdx = i == 0 ? (direction == Direction::Forward ? 0 : shape.size() - 1)
+                                    : cur_stops_to_indexes[stopIds[i - 1]].back();
+
         auto const [curIdx, pointInserted] =
             PrepareNearestPointOnTrack(stop.m_point, prevPoint, prevIdx, direction, shape, cur_considered_distance);
 
-        prevIdx = stopsToIndexes[stopIds[i - 1]].back();
         if (curIdx > shape.size())
         {
           CHECK(!itShape->second.m_lineIds.empty(), (shapeId));
@@ -975,13 +977,14 @@ std::optional<Direction> WorldFeed::ProjectStopsToShape(
           }
         }
 
-        stopsToIndexes[stopId].push_back(curIdx);
+        cur_stops_to_indexes[stopId].push_back(curIdx);
       }
       if (project_attempt_successful)
       {
         max_considered_distance = cur_considered_distance;
         stopsToIndexes = cur_stops_to_indexes;
         m_shapes.m_data[shapeId].m_lineIds = cur_shape_lines;
+        proper_projection_found = true;
       } else 
       {
         min_considered_distance = cur_considered_distance;
@@ -990,7 +993,7 @@ std::optional<Direction> WorldFeed::ProjectStopsToShape(
 
     
     itShape->second.m_points = std::move(shape);
-    return true;
+    return proper_projection_found;
   };
 
   if (tryProject(Direction::Forward))
