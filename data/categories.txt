@@ -4185,6 +4185,46 @@ sk:3Kino
 sw:4Sinema|burudani
 fa:سینما
 
+leisure-bowling_alley|@entertainment
+en:4Bowling Alley
+ar:ﺞﻨﻴﻟﻮﺑ ﺔﻟﺎﺻ
+be:Боўлінг
+bg:Боулинг писта
+ca:Bolera
+cs:Bowlingová dráha
+da:Bowling bane
+de:Bowlingbahn
+el:Αίθουσα σφαιρίσεως
+es:Bolera
+et:Bowlingusaal
+eu:Bolatokia
+fa:ﮓﻨﯿﻟﻮﺑ ﻦﻟﺎﺳ
+fi:Keilarata
+fr:Salle de bowling
+he:גנילואב םלוא
+hu:Tekepálya
+id:Arena Bowling
+it:Sala da bowling
+ja:ボーリング場
+ko:볼링장
+mr:गोलंदाजी गल्ली
+nb:Bowlinghall
+nl:Bowlingbaan
+pl:Kręgielnia
+pt:Pista de bowling
+pt-BR:Pista de boliche
+ro:Popicărie
+ru:4Боулинг
+sk:Bowlingová dráha
+sv:Bowlinghall
+sw:Njia ya Bowling
+th:ลานโบว์ลิ่ง
+tr:Bowling pisti
+uk:Боулінг
+vi:Sân chơi bowling
+zh-Hans:保龄球馆
+zh-Hant:保齡球館
+
 amenity-theatre|@entertainment
 en:4Theatre|U+1F3AD
 en-US:4Theater
@@ -10272,7 +10312,7 @@ cs:Nabíjecí stanice|nabíjení
 da:Ladestation|opladning
 nl:Oplaadstation|opladen
 fi:Latausasema|lataus
-fr:Station de recharge|Recharge
+fr:3Borne de recharge|4station de recharge|4voiture électrique|recharge
 de:4Ladestation|aufladen
 hu:Töltőállomás|töltés
 id:Pusat Pengisian Daya|pengisian daya
@@ -14400,3 +14440,20 @@ uk:Оптовий магазин
 vi:Cửa hàng bán buôn
 zh-Hans:批发店
 zh-Hant:批髮店
+
+area:leisure-track|leisure-track
+en:Track
+de:Laufbahn
+es:Pista deportiva
+et:Jooksurada
+fr:Piste de course
+it:Pista da corsa
+ja:トラック
+mr:ट्रॅक
+nl:Parcours
+pt:Pista para desportos não motorizados
+pt-BR:Pista para esportes não motorizados
+ru:Беговая дорожка
+tr:Pist
+uk:Бігова доріжка
+zh-Hans = 賽道
